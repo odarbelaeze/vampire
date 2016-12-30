@@ -41,12 +41,26 @@ namespace vcuda{
 // module internal namespace
 namespace internal{
 
-   // new type definitions (need to be selectable at compile time)
-   typedef double cu_real_t;
+   // new type definitions
+   #ifdef CUDA_DP
+      typedef double cu_real_t;
+   #else
+      typedef float cu_real_t;
+   #endif
+
    typedef cusp::array1d<cu_real_t, cusp::device_memory> cu_real_array_t;
    typedef cusp::array1d<int, cusp::device_memory> cu_index_array_t;
-   typedef cusp::dia_matrix<int, cu_real_t, cusp::device_memory> cu_exch_mat_t;
-   //typedef cusp::ell_matrix<int, cu_real_t, cusp::device_memory> cu_exch_mat_t;
+
+   // Compile-time selectable matrix structure
+   #if CUDA_MATRIX == CSR
+      typedef cusp::csr_matrix<int, cu_real_t, cusp::device_memory> cu_exch_mat_t;
+   #elif CUDA_MATRIX == DIA
+      typedef cusp::dia_matrix<int, cu_real_t, cusp::device_memory> cu_exch_mat_t;
+   #elif CUDA_MATRIX == ELL
+      typedef cusp::ell_matrix<int, cu_real_t, cusp::device_memory> cu_exch_mat_t;
+   #else
+      typedef cusp::csr_matrix<int, cu_real_t, cusp::device_memory> cu_exch_mat_t;
+   #endif
 
    // struct for material parameters
    struct material_parameters_t {

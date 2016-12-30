@@ -69,6 +69,9 @@ void update_external_fields (){
    // Check for errors
    check_cuda_errors (__FILE__, __LINE__);
 
+   // update dipole field
+   update_dipolar_fields();
+
    // std::ofstream fields("should_be_normal.txt");
    // for (size_t i = 0; i < cu::x_total_external_field_array.size(); ++i) {
    //    fields << cu::x_total_external_field_array[i] << std::endl;
@@ -129,11 +132,18 @@ __global__ void update_external_fields_kernel (
       cu_real_t alpha = mat.temperature_rescaling_alpha;
       cu_real_t sigma = mat.H_th_sigma;
       cu_real_t tc = mat.temperature_rescaling_Tc;
-      cu_real_t resc_sigma = (temp < tc) ? sigma * sqrt(tc * pow(temp / tc, alpha)) : sigma * sqrt(temp);
 
-      field_x = resc_sigma * curand_normal_double (&local_state);
-      field_y = resc_sigma * curand_normal_double (&local_state);
-      field_z = resc_sigma * curand_normal_double (&local_state);
+      #ifdef CUDA_DP
+         double resc_temp = (temp < tc) ? tc * pow(temp / tc, alpha) : temp;
+         double rsigma = sigma*sqrt(resc_temp);
+      #else
+         float resc_temp = (temp < tc) ? tc * __powf(temp / tc, alpha) : temp;
+         float rsigma = sigma*sqrtf(resc_temp);
+      #endif
+
+      field_x = rsigma * curand_normal_double (&local_state);
+      field_y = rsigma * curand_normal_double (&local_state);
+      field_z = rsigma * curand_normal_double (&local_state);
 
       // Local applied field
       cu_real_t norm_h = mat.applied_field_strength;

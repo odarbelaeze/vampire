@@ -5,31 +5,39 @@
 NVCC_VERSION=$(shell nvcc --version | tail -n 1 | cut -b 38-)
 NVCC=nvcc -DCOMP='"NVCC $(NVCC_VERSION)"'
 
-NVCC_FLAGS=-I/usr/local/cuda/include -I./hdr -I./src/qvoronoi --compiler-bindir=/usr/bin/g++ --compiler-options=-O3,-DCUDA  --ptxas-options=-v --maxrregcount=32 -arch=sm_20 -O3
-
 CUDALIBS=-L/usr/local/cuda/lib64/ -lcudart -lcusparse -lcurand
-
 
 # List module object filenames
 CUDA_OBJECTS= \
+	     obj/cuda/config.o \
 	     obj/cuda/data.o \
-	     obj/cuda/internal.o \
+		  obj/cuda/dipole.o \
+		  obj/cuda/exchange_fields.o \
+		  obj/cuda/external_fields.o \
+		  obj/cuda/finalize.o \
 	     obj/cuda/initialize.o \
+		  obj/cuda/internal.o \
+		  obj/cuda/llg_heun.o \
 	     obj/cuda/spin_fields.o \
-        obj/cuda/external_fields.o \
-        obj/cuda/dipole.o \
-	     obj/cuda/llg_heun.o \
-	     obj/cuda/finalize.o \
-	     obj/cuda/exchange_fields.o \
 	     obj/cuda/statistics.o
 
 # The device linked object for CUDA
 CUDA_DLINK= obj/cuda/vampire_cuda.o
 
-CUDA_CFLAGS= -O3 -I./hdr/cusplibrary-0.5.1 -I./hdr -DCUDA -arch=sm_20
+# set precision for cuda calculation
+CUDA_PR= -DCUDA_DP
+#CUDA_PR= -DCUDA_SP
+#CUDA_PR= -DCUDA_MP
+
+# set matrix format
+CUDA_MATRIX_TYPE = CSR
+#CUDA_MATRIX_TYPE = DIA
+#CUDA_MATRIX_TYPE = ELL
+
+CUDA_CFLAGS= -O3 -I./hdr/cusplibrary-0.5.1 -I./hdr -DCUDA -arch=sm_20 --use_fast_math -ftz=true -std=c++11
 
 $(CUDA_OBJECTS): obj/%.o: src/%.cu
-	$(NVCC) $< -c -o $@ $(CUDA_CFLAGS)
+	$(NVCC) $< -c -o $@ $(CUDA_CFLAGS) $(CUDA_PR) -DCUDA_MATRIX=$(CUDA_MATRIX_TYPE)
 
 # Target for device link -- not working atm
 #$(CUDA_DLINK): $(cuda_objects)

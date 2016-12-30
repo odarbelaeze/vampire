@@ -1,7 +1,7 @@
 #include "exchange_fields.hpp"
 
 #include "atoms.hpp"
-
+#include "vio.hpp"
 #include "cuda_utils.hpp"
 #include "internal.hpp"
 #include "data.hpp"
@@ -40,6 +40,17 @@ namespace vcuda
 
          int initialise_exchange()
          {
+
+            // print out informative message regarding compile time option for matrix format
+            #if CUDA_MATRIX == CSR
+               zlog << zTs() << "Configured exchange calculation using CSR matrix format" << std::endl;
+            #elif CUDA_MATRIX == DIA
+               zlog << zTs() << "Configured exchange calculation using DIA matrix format" << std::endl;
+            #elif CUDA_MATRIX == ELL
+               zlog << zTs() << "Configured exchange calculation using ELL matrix format" << std::endl;
+            #else
+               zlog << zTs() << "Configured exchange calculation using default CSR matrix format" << std::endl;
+            #endif
 
             check_device_memory(__FILE__,__LINE__);
 
@@ -91,7 +102,7 @@ namespace vcuda
                   3*::atoms::neighbour_list_array.size()
                   );
 
-            std::cerr << "Attempting to fill matrix." << std::endl;
+            //std::cerr << "Attempting to fill matrix." << std::endl;
 
             const int Natoms = ::atoms::num_atoms;
             const int Nnbrs = row_indices.size();
@@ -106,24 +117,43 @@ namespace vcuda
                J_matrix_h.column_indices[i+2*Nnbrs] = column_indices[i]+2*Natoms;
 
                int iid = ::atoms::neighbour_interaction_type_array[i];
-               J_matrix_h.values[i] = - ::atoms::i_exchange_list[iid].Jij;
-               J_matrix_h.values[i+Nnbrs] = - ::atoms::i_exchange_list[iid].Jij;
-               J_matrix_h.values[i+2*Nnbrs] = - ::atoms::i_exchange_list[iid].Jij;
+               switch( ::atoms::exchange_type)
+               {
+                  case 0: // Isotropic
+                     J_matrix_h.values[i]         = - ::atoms::i_exchange_list[iid].Jij;
+                     J_matrix_h.values[i+Nnbrs]   = - ::atoms::i_exchange_list[iid].Jij;
+                     J_matrix_h.values[i+2*Nnbrs] = - ::atoms::i_exchange_list[iid].Jij;
+                     break;
+
+                  case 1: // Vectorial
+                     J_matrix_h.values[i]         = - ::atoms::v_exchange_list[iid].Jij[0];
+                     J_matrix_h.values[i+Nnbrs]   = - ::atoms::v_exchange_list[iid].Jij[1];
+                     J_matrix_h.values[i+2*Nnbrs] = - ::atoms::v_exchange_list[iid].Jij[2];
+                     break;
+
+                  case 2: // Tensor
+                     std::cerr << "Error! Tensorial form of exchange not yet implemented in cuda version!" << std::endl;
+                     zlog << zTs() << "Error! Tensorial form of exchange not yet implemented in cuda version!" << std::endl;
+                     break;
+               }
             }
 
-            std::cerr << "Attempting matrix conversion now." << std::endl;
+            // Black magic to turn CUDA_MATRIX into a string
+            #define STRING(s) #s
+            #define VALSTRING(s) STRING(s)
+
+            // Print out informative message
+            zlog << zTs() << "Attempting matrix conversion from CSR to " << VALSTRING(CUDA_MATRIX) << " and transferring to device..." << std::endl;
 
             cusp::convert( J_matrix_h, J_matrix_d);
 
-            std::cerr << "Conversion complete." << std::endl;
+            zlog << zTs() << "Matrix conversion and transfer complete." << std::endl;
 
             const size_t occupied_diagonals = count_diagonals(J_xx_matrix_h.num_rows, J_xx_matrix_h.num_rows, row_indices, J_xx_matrix_h.column_indices);
             const float size       = float(occupied_diagonals) * float(J_xx_matrix_h.num_rows);
             const float fill_ratio = size / std::max(1.0f, float(J_xx_matrix_h.num_entries));
 
-            std::cerr << "Matrix:\nDiagonals = " << occupied_diagonals << "\nsize = " << size << "\nfill ratio = "<< fill_ratio << std::endl;
-
-
+            zlog << zTs() << "Cuda Matrix: Diagonals = " << occupied_diagonals << ", size = " << size << ", fill ratio = "<< fill_ratio << std::endl;
 
             switch( ::atoms::exchange_type)
             {
@@ -172,12 +202,14 @@ namespace vcuda
                   break;
 
                case 2: // Tensor
+                  std::cerr << "Error! Tensorial form of exchange not yet implemented in cuda version!" << std::endl;
+                  zlog << zTs() << "Error! Tensorial form of exchange not yet implemented in cuda version!" << std::endl;
                   break;
             }
 
             exchange_initialised = true;
 
-            std::cout << "Made matrix" << std::endl;
+            //std::cout << "Made matrix" << std::endl;
             check_device_memory(__FILE__,__LINE__);
             check_cuda_errors(__FILE__,__LINE__);
             return EXIT_SUCCESS;
@@ -281,4 +313,3 @@ namespace vcuda
    } // end namespace internal
 
 } // end namespace vcuda
-
